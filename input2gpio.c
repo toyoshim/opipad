@@ -117,6 +117,22 @@ struct gamepad gamepads[] = {
       { .code = 0x131, .key = JKEY_2     },
       { .code = 0x133, .key = JKEY_3     },
     }
+  },
+  {
+    .name = "Microsoft X-Box 360 pad",
+    .dpads = {
+      { .code = 0x00, .center = 0, .range = 8192, .direction = DIR_X },
+      { .code = 0x01, .center = 0, .range = 8192, .direction = DIR_Y },
+      { .code = 0x10, .center = 0, .range =    0, .direction = DIR_X },
+      { .code = 0x11, .center = 0, .range =    0, .direction = DIR_Y },
+    },
+    .buttons = {
+      { .code = 0x13a, .key = JKEY_COIN  },
+      { .code = 0x13b, .key = JKEY_START },
+      { .code = 0x133, .key = JKEY_1     },
+      { .code = 0x130, .key = JKEY_2     },
+      { .code = 0x131, .key = JKEY_3     },
+    }
   }
 };
 
@@ -133,9 +149,9 @@ void update(enum jamma_key key, int value) {
 
   int pin = gpio_pin[key];
   if (value)
-    gpioa->clr = (1 << pin);
+    gpioa->oen_set_out = (1 << pin);
   else
-    gpioa->set = (1 << pin);
+    gpioa->oen_set_in = (1 << pin);
 }
 
 void do_bridge(int fd) {
@@ -212,8 +228,8 @@ int main(int argc, char** argv) {
   config_regs->ap_gpio_a_mode |= (1 << 14) | (1 << 15);
 
   // Set GPIO_A 0...6, 14, and 15 as output port, and drive HIGH signals.
-  gpioa->oen_set_out = 0xc07f;
-  gpioa->set = 0xc07f;
+  gpioa->oen_set_in = 0xc07f;
+  gpioa->clr = 0xc07f;
 
   for (;;) {
     int fd = open(EVENT_DEV, O_RDWR);
@@ -221,7 +237,7 @@ int main(int argc, char** argv) {
       do_bridge(fd);
       close(fd);
     }
-    sleep(1);
+    usleep(5000);
   }
   return 0;
 }
