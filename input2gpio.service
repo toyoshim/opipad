@@ -1,0 +1,15 @@
+[Unit]
+Description=OpiPad input2gpio service
+DefaultDependencies=no
+Before=sysinit.target
+Conflicts=shutdown.target
+
+[Service]
+ExecStart=/opt/opipad/input2gpio
+ExecStop=killall input2gpio
+Type=onshot
+RemainAfterExit=yes
+Restart=always
+
+[Install]
+WantedBy=sysinit.target
