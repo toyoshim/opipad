@@ -177,7 +177,8 @@ void update(enum jamma_key key, int value) {
   state &= ~(1 << key);
   if (value)
     state |= 1 << key;
-  for (int i = 11; i >= 0; --i)
+  int i;
+  for (i = 11; i >= 0; --i)
     fprintf(stderr, "%d", (state >> i) & 1);
   fprintf(stderr, "\n");
 //#endif
@@ -201,7 +202,8 @@ void do_bridge(int fd) {
   ioctl(fd, EVIOCGNAME(sizeof(name)), name);
 
   struct gamepad* detected_gamepad = NULL;
-  for (int i = 0; i < sizeof(gamepads) / sizeof(struct gamepad); ++i) {
+  int i;
+  for (i = 0; i < sizeof(gamepads) / sizeof(struct gamepad); ++i) {
     if (0 == strcmp(name, gamepads[i].name)) {
       detected_gamepad = &gamepads[i];
       fprintf(stderr, "known devide detected: %s\n", name);
@@ -221,7 +223,8 @@ void do_bridge(int fd) {
     if (detected_gamepad) {
       int consumed = 0;
       if (e.type == EV_KEY) {
-        for (int i = 0; i < sizeof(detected_gamepad->buttons) / sizeof(struct button); ++i) {
+        int i;
+        for (i = 0; i < sizeof(detected_gamepad->buttons) / sizeof(struct button); ++i) {
           if (detected_gamepad->buttons[i].code != e.code)
             continue;
           consumed = 1;
@@ -229,7 +232,8 @@ void do_bridge(int fd) {
           break;
         }
       } else if (e.type == EV_ABS) {
-        for (int i = 0; i < sizeof(detected_gamepad->dpads) / sizeof(struct dpad); ++i) {
+        int i;
+        for (i = 0; i < sizeof(detected_gamepad->dpads) / sizeof(struct dpad); ++i) {
           if (detected_gamepad->dpads[i].code != e.code)
             continue;
           consumed = 1;
@@ -245,7 +249,7 @@ void do_bridge(int fd) {
           }
           break;
         }
-        for (int i = 0; i < sizeof(detected_gamepad->buttons) / sizeof(struct button); ++i) {
+        for (i = 0; i < sizeof(detected_gamepad->buttons) / sizeof(struct button); ++i) {
           if (detected_gamepad->buttons[i].code != e.code)
             continue;
           consumed = 1;
@@ -257,7 +261,7 @@ void do_bridge(int fd) {
         continue;
     }
     if (e.type == EV_KEY || e.type == EV_ABS)
-      printf("%04x: %04x, %d\n", e.type, e.code, e.value);
+      fprintf(stderr, "%04x: %04x, %d\n", e.type, e.code, e.value);
   }
 }
 
