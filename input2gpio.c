@@ -81,8 +81,8 @@ struct gamepad gamepads[] = {
   {
     .name = "HORI CO.,LTD. HORIPAD 4 ",
     .dpads = {
-      { .code = 0x00, .center = 128, .range = 16, .direction = DIR_X },
-      { .code = 0x01, .center = 128, .range = 16, .direction = DIR_Y },
+      { .code = 0x00, .center = 128, .range = 32, .direction = DIR_X },
+      { .code = 0x01, .center = 128, .range = 32, .direction = DIR_Y },
       { .code = 0x10, .center =   0, .range =  0, .direction = DIR_X },
       { .code = 0x11, .center =   0, .range =  0, .direction = DIR_Y }
     },
@@ -100,8 +100,8 @@ struct gamepad gamepads[] = {
   {
     .name = "HORI CO.,LTD. Fighting Stick mini 4",
     .dpads = {
-      { .code = 0x00, .center = 128, .range = 16, .direction = DIR_X },
-      { .code = 0x01, .center = 128, .range = 16, .direction = DIR_Y },
+      { .code = 0x00, .center = 128, .range = 32, .direction = DIR_X },
+      { .code = 0x01, .center = 128, .range = 32, .direction = DIR_Y },
       { .code = 0x10, .center =   0, .range =  0, .direction = DIR_X },
       { .code = 0x11, .center =   0, .range =  0, .direction = DIR_Y }
     },
