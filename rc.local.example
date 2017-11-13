@@ -1,0 +1,11 @@
+# Copyright 2017 Takashi Toyoshima <toyoshim@gmail.com>. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+insmod /opt/opipad/hid_opp.ko
+modprobe g_hid iProduct='Hori Fighting Stick EX2 (Virtual)'
+echo 2 > /sys/bus/platform/devices/sunxi_usb_udc/otg_role
+
+/opt/opipad/uin_oppd > /dev/null 2> /dev/null &
+
+
