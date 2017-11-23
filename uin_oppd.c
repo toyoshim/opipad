@@ -39,6 +39,13 @@
 #define MODE_HID 1
 int mode = MODE_UINPUT;
 
+int rapid_a = 0;
+int rapid_b = 0;
+int rapid_x = 0;
+int rapid_y = 0;
+
+int rapid_count = 0;
+
 struct pio_cfg {
   volatile uint32_t cfg[4];
   volatile uint32_t dat;
@@ -125,6 +132,44 @@ void emit(int fd, int type, int code, int val) {
   write(fd, &e, sizeof(e));
 }
 
+void manage_input_mode(int changed, int pressed, int pressed_state) {
+  static int pressing = 0;
+  static int configured = 0;
+
+  if (pressing) {
+    pressing++;
+
+    if (pressed_state & B_A) {
+      rapid_a ^= 1;
+      configured = 1;
+    }
+    if (pressed_state & B_B) {
+      rapid_b ^= 1;
+      configured = 1;
+    }
+    if (pressed_state & B_X) {
+      rapid_x ^= 1;
+      configured = 1;
+    }
+    if (pressed_state & B_Y) {
+      rapid_y ^= 1;
+      configured = 1;
+    }
+  }
+
+  if (!changed)
+    return;
+
+  if (pressed) {
+    pressing = 1;
+    return;
+  }
+
+  if (!configured && pressing > 2000)
+    mode = (mode + 1) % 2;
+  pressing = 0;
+}
+
 int main() {
   if (gpio_setup()) {
     perror("open /dev/mem");
@@ -142,19 +187,35 @@ int main() {
   hid_report[2] = 0x00;
   hid_report[3] = 0x00;
 
-  int state = 0x3fffff;
+  int old_raw_state = 0x3fffff;
+  int old_cooked_state = 0x3fffff;
 
   for (;;) {
-    usleep(5000);
+    usleep(1000);
     int new_state = pa->dat;
-    int changed_state = (state ^ new_state) & B_ALL;
-    state = new_state;
+    int changed_state = (old_raw_state ^ new_state) & B_ALL;
+    old_raw_state = new_state;
+    int pressed_state = changed_state & ~new_state;
+    if ((rapid_count >> 4) & 1) {
+      if (rapid_a)
+        new_state |= B_A;
+      if (rapid_b)
+        new_state |= B_B;
+      if (rapid_x)
+        new_state |= B_X;
+      if (rapid_y)
+        new_state |= B_Y;
+    }
+    changed_state = (old_cooked_state ^ new_state) & B_ALL;
+    old_cooked_state = new_state;
+    int state = new_state;
+
+    manage_input_mode(changed_state & B_XBOX, ~state & B_XBOX, pressed_state);
+
+    rapid_count++;
 
     if (!changed_state)
       continue;
-
-    if (changed_state & B_XBOX && !(state & B_XBOX ))
-      mode = (mode + 1) % 2;
 
     if (changed_state & B_BACK ) {
       emit(js_fd, EV_KEY, BTN_SELECT, (state & B_BACK ) ? 0 : 1);
@@ -206,13 +267,11 @@ int main() {
       hid_report[0] &= 0xbf;
       hid_report[0] |= (state & B_LB   ) ? 0 : 0x40;
     }
-    /*
     if (changed_state & B_XBOX ) {
       emit(js_fd, EV_KEY, BTN_MODE  , (state & B_XBOX ) ? 0 : 1);
       hid_report[1] &= 0xf3;
       hid_report[1] |= (state & B_XBOX ) ? 0 : 0x04;
     }
-    */
 
     if (changed_state & (B_LEFT | B_RIGHT)) {
       int val = !(state & B_LEFT) ? -32767 : !(state & B_RIGHT) ? 32767 : 0;
