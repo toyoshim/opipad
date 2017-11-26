@@ -212,7 +212,7 @@ int main() {
   int old_cooked_state = 0x3fffff;
 
   for (;;) {
-    usleep(1000);
+    usleep(2000);
     int new_state = pa->dat;
     int changed_state = (old_raw_state ^ new_state) & B_ALL;
     old_raw_state = new_state;
