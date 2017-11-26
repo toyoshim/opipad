@@ -234,7 +234,7 @@ int main() {
 
     manage_input_mode(
         changed_state & B_XBOX, ~state & B_XBOX, pressed_state, released_state,
-        hid_fd);
+        js_fd);
 
     rapid_count++;
 
