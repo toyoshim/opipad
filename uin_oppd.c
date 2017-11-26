@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #define GPIO_PA_BASE 0x01c20000
@@ -94,6 +95,11 @@ int js_setup() {
   ioctl(fd, UI_SET_KEYBIT, BTN_THUMBL);
   ioctl(fd, UI_SET_KEYBIT, BTN_THUMBR);
 
+  ioctl(fd, UI_SET_KEYBIT, KEY_L);
+  ioctl(fd, UI_SET_KEYBIT, KEY_U);
+  ioctl(fd, UI_SET_KEYBIT, KEY_R);
+  ioctl(fd, UI_SET_KEYBIT, KEY_D);
+
   ioctl(fd, UI_SET_EVBIT, EV_ABS);
   ioctl(fd, UI_SET_ABSBIT, ABS_X);
   ioctl(fd, UI_SET_ABSBIT, ABS_Y);
@@ -128,31 +134,46 @@ void emit(int fd, int type, int code, int val) {
   e.type = type;
   e.code = code;
   e.value = val;
-  e.time.tv_sec = e.time.tv_usec = 0;  // to be ignored
+  gettimeofday(&e.time, NULL);
   write(fd, &e, sizeof(e));
 }
 
-void manage_input_mode(int changed, int pressed, int pressed_state) {
+void manage_input_mode(
+    int changed, int pressed, int pressed_state, int released_state, int fd) {
   static int pressing = 0;
   static int configured = 0;
 
   if (pressing) {
     pressing++;
 
-    if (pressed_state & B_A) {
+    if (pressed_state & B_A)
       rapid_a ^= 1;
-      configured = 1;
-    }
-    if (pressed_state & B_B) {
+    if (pressed_state & B_B)
       rapid_b ^= 1;
-      configured = 1;
-    }
-    if (pressed_state & B_X) {
+    if (pressed_state & B_X)
       rapid_x ^= 1;
-      configured = 1;
-    }
-    if (pressed_state & B_Y) {
+    if (pressed_state & B_Y)
       rapid_y ^= 1;
+    if (pressed_state & B_LEFT)
+      emit(fd, EV_KEY, KEY_L, 1);
+    if (released_state & B_LEFT)
+      emit(fd, EV_KEY, KEY_L, 0);
+    if (pressed_state & B_UP)
+      emit(fd, EV_KEY, KEY_U, 1);
+    if (released_state & B_UP)
+      emit(fd, EV_KEY, KEY_U, 0);
+    if (pressed_state & B_RIGHT)
+      emit(fd, EV_KEY, KEY_R, 1);
+    if (released_state & B_RIGHT)
+      emit(fd, EV_KEY, KEY_R, 0);
+    if (pressed_state & B_DOWN)
+      emit(fd, EV_KEY, KEY_D, 1);
+    if (released_state & B_DOWN)
+      emit(fd, EV_KEY, KEY_D, 0);
+
+    if (pressed_state &
+        (B_LEFT | B_UP | B_RIGHT | B_DOWN | B_A | B_B | B_X | B_Y) ||
+        released_state & (B_LEFT | B_UP | B_RIGHT | B_DOWN)) {
       configured = 1;
     }
   }
@@ -196,6 +217,7 @@ int main() {
     int changed_state = (old_raw_state ^ new_state) & B_ALL;
     old_raw_state = new_state;
     int pressed_state = changed_state & ~new_state;
+    int released_state = changed_state & new_state;
     if ((rapid_count >> 4) & 1) {
       if (rapid_a)
         new_state |= B_A;
@@ -210,7 +232,9 @@ int main() {
     old_cooked_state = new_state;
     int state = new_state;
 
-    manage_input_mode(changed_state & B_XBOX, ~state & B_XBOX, pressed_state);
+    manage_input_mode(
+        changed_state & B_XBOX, ~state & B_XBOX, pressed_state, released_state,
+        hid_fd);
 
     rapid_count++;
 
