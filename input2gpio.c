@@ -103,6 +103,20 @@ struct gamepad gamepads[] = {
       { .code = 0x131, .key = JKEY_2     },
       { .code = 0x133, .key = JKEY_3     },
     }
+  },
+  {
+    .name = "Hori Fighting Stick EX2",
+    .dpads = {
+      { .code = 0x10, .center = 0, .range = 0, .direction = DIR_X },
+      { .code = 0x11, .center = 0, .range = 0, .direction = DIR_Y },
+    },
+    .buttons = {
+      { .code = 0x13a, .key = JKEY_COIN  },
+      { .code = 0x13b, .key = JKEY_START },
+      { .code = 0x130, .key = JKEY_1     },
+      { .code = 0x131, .key = JKEY_2     },
+      { .code = 0x133, .key = JKEY_3     },
+    }
   }
 };
 
