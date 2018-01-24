@@ -37,7 +37,8 @@
     B_A | B_B | B_X | B_Y | B_RT | B_LT | B_RB | B_LB | B_XBOX)
 
 #define MODE_UINPUT 0
-#define MODE_HID 1
+#define MODE_KBD 1
+#define MODE_HID 2
 int mode = MODE_UINPUT;
 
 int rapid_a = 0;
@@ -52,7 +53,28 @@ struct pio_cfg {
   volatile uint32_t dat;
   volatile uint32_t drv[2];
   volatile uint32_t pul[2];
-}* pa;
+}* gpio;
+
+int led_map[4] = { 2, 0, 3, 1 };
+
+void led_off(int led) {
+  int n = led_map[led];
+  gpio[2].cfg[0] &= ~(0xf << (n * 4));
+  gpio[2].pul[0] &= ~(0x3 << (n * 2));
+}
+
+void led_on(int led) {
+  int n = led_map[led];
+  gpio[2].cfg[0] |= (0x1 << (n * 4));
+  gpio[2].dat &= ~(1 << n);
+}
+
+void led_set(int n, int on) {
+  if (on)
+    led_on(n);
+  else
+    led_off(n);
+}
 
 int gpio_setup() {
   int fd = open("/dev/mem", O_RDWR | O_SYNC);
@@ -61,16 +83,21 @@ int gpio_setup() {
 
   int prot = PROT_READ | PROT_WRITE;
   size_t size = sysconf(_SC_PAGE_SIZE);
-  char *pa_base = mmap(NULL, size, prot, MAP_SHARED, fd, GPIO_PA_BASE);
-  pa = (struct pio_cfg*)&pa_base[GPIO_PA_OFFSET];
+  char *gpio_base = mmap(NULL, size, prot, MAP_SHARED, fd, GPIO_PA_BASE);
+  gpio = (struct pio_cfg*)&gpio_base[GPIO_PA_OFFSET];
 
-  pa->cfg[0] &= 0x00ff0000;  // PA07-PA00: input [7:6,3:0]
-  pa->cfg[1] &= 0xf0000000;  // PA15-PA08: input [14:8]
-  pa->cfg[2] &= 0xfff00fff;  // PA21-PA16: input [20:19]
-  pa->pul[0] &= 0xc0000f00;  // PA15-PA00: pull-* disabled [14:6,3:0]
-  pa->pul[0] |= 0x15555055;  // PA15-PA00: pull-up [14:6,3:0]
-  pa->pul[1] &= 0xfffffc3f;  // PA21-PA16: pull-* disabled [20:19]
-  pa->pul[1] |= 0x00000140;  // PA21-PA16: pull-up [20:19]
+  gpio[0].cfg[0] &= 0x00ff0000;  // PA07-PA00: input [7:6,3:0]
+  gpio[0].cfg[1] &= 0xf0000000;  // PA15-PA08: input [14:8]
+  gpio[0].cfg[2] &= 0xfff00fff;  // PA21-PA16: input [20:19]
+  gpio[0].pul[0] &= 0xc0000f00;  // PA15-PA00: pull-* disabled [14:6,3:0]
+  gpio[0].pul[0] |= 0x15555055;  // PA15-PA00: pull-up [14:6,3:0]
+  gpio[0].pul[1] &= 0xfffffc3f;  // PA21-PA16: pull-* disabled [20:19]
+  gpio[0].pul[1] |= 0x00000140;  // PA21-PA16: pull-up [20:19]
+
+  led_on(0);
+  led_off(1);
+  led_off(2);
+  led_off(3);
 
   return 0;
 }
@@ -95,10 +122,30 @@ int js_setup() {
   ioctl(fd, UI_SET_KEYBIT, BTN_THUMBL);
   ioctl(fd, UI_SET_KEYBIT, BTN_THUMBR);
 
-  ioctl(fd, UI_SET_KEYBIT, KEY_L);
-  ioctl(fd, UI_SET_KEYBIT, KEY_U);
-  ioctl(fd, UI_SET_KEYBIT, KEY_R);
-  ioctl(fd, UI_SET_KEYBIT, KEY_D);
+  if (mode == MODE_KBD) {
+    ioctl(fd, UI_SET_KEYBIT, KEY_A);      // X
+    ioctl(fd, UI_SET_KEYBIT, KEY_D);
+    ioctl(fd, UI_SET_KEYBIT, KEY_L);
+    ioctl(fd, UI_SET_KEYBIT, KEY_Q);      // L
+    ioctl(fd, UI_SET_KEYBIT, KEY_R);
+    ioctl(fd, UI_SET_KEYBIT, KEY_S);      // Y
+    ioctl(fd, UI_SET_KEYBIT, KEY_U);
+    ioctl(fd, UI_SET_KEYBIT, KEY_X);      // B
+    ioctl(fd, UI_SET_KEYBIT, KEY_W);      // R
+    ioctl(fd, UI_SET_KEYBIT, KEY_Z);      // A
+    ioctl(fd, UI_SET_KEYBIT, KEY_ENTER);  // SELECT
+    ioctl(fd, UI_SET_KEYBIT, KEY_SPACE);  // START
+    ioctl(fd, UI_SET_KEYBIT, KEY_ESC);    // LB
+    ioctl(fd, UI_SET_KEYBIT, KEY_UP);
+    ioctl(fd, UI_SET_KEYBIT, KEY_DOWN);
+    ioctl(fd, UI_SET_KEYBIT, KEY_LEFT);
+    ioctl(fd, UI_SET_KEYBIT, KEY_RIGHT);
+  } else {
+    ioctl(fd, UI_SET_KEYBIT, KEY_U);
+    ioctl(fd, UI_SET_KEYBIT, KEY_D);
+    ioctl(fd, UI_SET_KEYBIT, KEY_L);
+    ioctl(fd, UI_SET_KEYBIT, KEY_R);
+  }
 
   ioctl(fd, UI_SET_EVBIT, EV_ABS);
   ioctl(fd, UI_SET_ABSBIT, ABS_X);
@@ -127,7 +174,7 @@ int js_setup() {
 
 // from examples at https://www.kernel.org/doc/html/v4.12/input/uinput.html
 void emit(int fd, int type, int code, int val) {
-  if (mode != MODE_UINPUT)
+  if (mode == MODE_HID)
     return;
 
   struct input_event e;
@@ -138,7 +185,7 @@ void emit(int fd, int type, int code, int val) {
   write(fd, &e, sizeof(e));
 }
 
-void manage_input_mode(
+int manage_input_mode(
     int changed, int pressed, int pressed_state, int released_state, int fd) {
   static int pressing = 0;
   static int configured = 0;
@@ -176,19 +223,33 @@ void manage_input_mode(
         released_state & (B_LEFT | B_UP | B_RIGHT | B_DOWN)) {
       configured = 1;
     }
+
+    led_set(0, rapid_a);
+    led_set(1, rapid_b);
+    led_set(2, rapid_x);
+    led_set(3, rapid_y);
   }
 
   if (!changed)
-    return;
+    return 0;
 
   if (pressed) {
     pressing = 1;
-    return;
+    return 0;
   }
 
-  if (!configured && pressing > 2000)
-    mode = (mode + 1) % 2;
+  int mode_changed = 0;
+  if (!configured && pressing > 1000) {
+    mode = (mode + 1) % 3;
+    mode_changed = 1;
+  }
+
   pressing = 0;
+  led_set(0, mode == 0);
+  led_set(1, mode == 1);
+  led_set(2, mode == 2);
+  led_set(3, mode == 3);
+  return mode_changed;
 }
 
 int main() {
@@ -213,7 +274,7 @@ int main() {
 
   for (;;) {
     usleep(2000);
-    int new_state = pa->dat;
+    int new_state = gpio[0].dat;
     int changed_state = (old_raw_state ^ new_state) & B_ALL;
     old_raw_state = new_state;
     int pressed_state = changed_state & ~new_state;
@@ -232,9 +293,17 @@ int main() {
     old_cooked_state = new_state;
     int state = new_state;
 
-    manage_input_mode(
+    if (manage_input_mode(
         changed_state & B_XBOX, ~state & B_XBOX, pressed_state, released_state,
-        js_fd);
+        js_fd)) {
+      int new_fd = js_setup();
+      if (new_fd >= 0) {
+        close(js_fd);
+        js_fd = new_fd;
+      }
+    }
+    if (~state & B_XBOX)
+      state |= (B_A | B_B | B_X | B_Y);
 
     rapid_count++;
 
@@ -242,52 +311,62 @@ int main() {
       continue;
 
     if (changed_state & B_BACK ) {
-      emit(js_fd, EV_KEY, BTN_SELECT, (state & B_BACK ) ? 0 : 1);
+      int code = (mode == MODE_KBD) ? KEY_ENTER : BTN_SELECT;
+      emit(js_fd, EV_KEY, code, (state & B_BACK ) ? 0 : 1);
       hid_report[1] &= 0xfd;
       hid_report[1] |= (state & B_BACK ) ? 0 : 0x02;
     }
     if (changed_state & B_START) {
-      emit(js_fd, EV_KEY, BTN_START , (state & B_START) ? 0 : 1);
+      int code = (mode == MODE_KBD) ? KEY_SPACE : BTN_START;
+      emit(js_fd, EV_KEY, code, (state & B_START) ? 0 : 1);
       hid_report[1] &= 0xfe;
       hid_report[1] |= (state & B_START) ? 0 : 0x01;
     }
     if (changed_state & B_A    ) {
-      emit(js_fd, EV_KEY, BTN_A     , (state & B_A    ) ? 0 : 1);
+      int code = (mode == MODE_KBD) ? KEY_Z : BTN_A;
+      emit(js_fd, EV_KEY, code, (state & B_A    ) ? 0 : 1);
       hid_report[0] &= 0xfe;
       hid_report[0] |= (state & B_A    ) ? 0 : 0x01;
     }
     if (changed_state & B_B    ) {
-      emit(js_fd, EV_KEY, BTN_B     , (state & B_B    ) ? 0 : 1);
+      int code = (mode == MODE_KBD) ? KEY_X : BTN_B;
+      emit(js_fd, EV_KEY, code, (state & B_B    ) ? 0 : 1);
       hid_report[0] &= 0xfd;
       hid_report[0] |= (state & B_B    ) ? 0 : 0x02;
     }
     if (changed_state & B_X    ) {
-      emit(js_fd, EV_KEY, BTN_X     , (state & B_X    ) ? 0 : 1);
+      int code = (mode == MODE_KBD) ? KEY_A : BTN_X;
+      emit(js_fd, EV_KEY, code, (state & B_X    ) ? 0 : 1);
       hid_report[0] &= 0xfb;
       hid_report[0] |= (state & B_X    ) ? 0 : 0x04;
     }
     if (changed_state & B_Y    ) {
-      emit(js_fd, EV_KEY, BTN_Y     , (state & B_Y    ) ? 0 : 1);
+      int code = (mode == MODE_KBD) ? KEY_S : BTN_Y;
+      emit(js_fd, EV_KEY, code, (state & B_Y    ) ? 0 : 1);
       hid_report[0] &= 0xf7;
       hid_report[0] |= (state & B_Y    ) ? 0 : 0x08;
     }
     if (changed_state & B_RT   ) {
-      emit(js_fd, EV_KEY, BTN_TR2   , (state & B_RT   ) ? 0 : 1);
+      int code = (mode == MODE_KBD) ? KEY_W : BTN_TR2;
+      emit(js_fd, EV_KEY, code, (state & B_RT   ) ? 0 : 1);
       hid_report[0] &= 0xdf;
       hid_report[0] |= (state & B_RT   ) ? 0 : 0x20;
     }
     if (changed_state & B_LT   ) {
-      emit(js_fd, EV_KEY, BTN_TL2   , (state & B_LT   ) ? 0 : 1);
+      int code = (mode == MODE_KBD) ? KEY_Q: BTN_TL2;
+      emit(js_fd, EV_KEY, code, (state & B_LT   ) ? 0 : 1);
       hid_report[0] &= 0xef;
       hid_report[0] |= (state & B_LT   ) ? 0 : 0x10;
     }
     if (changed_state & B_RB   ) {
-      emit(js_fd, EV_KEY, BTN_TR    , (state & B_RB   ) ? 0 : 1);
+      int code = (mode == MODE_KBD) ? KEY_ESC: BTN_TR;
+      emit(js_fd, EV_KEY, code, (state & B_RB   ) ? 0 : 1);
       hid_report[0] &= 0x7f;
       hid_report[0] |= (state & B_RB   ) ? 0 : 0x80;
     }
     if (changed_state & B_LB   ) {
-      emit(js_fd, EV_KEY, BTN_TL    , (state & B_LB   ) ? 0 : 1);
+      int code = (mode == MODE_KBD) ? KEY_ESC: BTN_TL;
+      emit(js_fd, EV_KEY, code, (state & B_LB   ) ? 0 : 1);
       hid_report[0] &= 0xbf;
       hid_report[0] |= (state & B_LB   ) ? 0 : 0x40;
     }
@@ -299,15 +378,25 @@ int main() {
 
     if (changed_state & (B_LEFT | B_RIGHT)) {
       int val = !(state & B_LEFT) ? -32767 : !(state & B_RIGHT) ? 32767 : 0;
-      emit(js_fd, EV_ABS, ABS_X, val);
+      if (mode == MODE_UINPUT)
+        emit(js_fd, EV_ABS, ABS_X, val);
       val = !(state & B_LEFT) ? -127 : !(state & B_RIGHT) ? 127 : 0;
       hid_report[2] = val;
+      if (mode == MODE_KBD) {
+        emit(js_fd, EV_KEY, KEY_LEFT,  (state & B_LEFT ) ? 0 : 1);
+        emit(js_fd, EV_KEY, KEY_RIGHT, (state & B_RIGHT) ? 0 : 1);
+      }
     }
     if (changed_state & (B_UP | B_DOWN)) {
       int val = !(state & B_UP) ? -32767 : !(state & B_DOWN) ? 32767 : 0;
-      emit(js_fd, EV_ABS, ABS_Y, val);
+      if (mode == MODE_UINPUT)
+        emit(js_fd, EV_ABS, ABS_Y, val);
       val = !(state & B_UP) ? -127 : !(state & B_DOWN) ? 127 : 0;
       hid_report[3] = val;
+      if (mode == MODE_KBD) {
+        emit(js_fd, EV_KEY, KEY_UP,    (state & B_UP   ) ? 0 : 1);
+        emit(js_fd, EV_KEY, KEY_DOWN,  (state & B_DOWN ) ? 0 : 1);
+      }
     }
     hid_report[1] &= 0x0f;
     if (hid_report[2] == -127) {
