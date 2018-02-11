@@ -25,6 +25,7 @@ volatile struct config_regs {
 }* config_regs;
 
 #define GPIOA_BASE 0x20930000
+#define GPIOB_BASE 0x20931000
 
 volatile struct gpio_regs {
   uint32_t oen_val;
@@ -34,7 +35,7 @@ volatile struct gpio_regs {
   uint32_t set;
   uint32_t clr;
   // ...
-}* gpioa;
+}* gpioa, * gpiob;
 
 enum jamma_key {
   JKEY_COIN,
@@ -46,9 +47,12 @@ enum jamma_key {
   JKEY_1,
   JKEY_2,
   JKEY_3,
+  JKEY_4,
+  JKEY_5,
+  JKEY_6,
 };
 
-int gpio_pin[] = { 0, 1, 2, 3, 4, 5, 6, 14, 15 };
+int gpio_pin[] = { 0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 37, 38 };
 
 enum direction {
   DIR_X,
@@ -70,7 +74,7 @@ struct button {
 struct gamepad {
   const char* name;
   struct dpad dpads[4];
-  struct button buttons[5];
+  struct button buttons[8];
 };
 
 struct gamepad gamepads[] = {
@@ -87,7 +91,29 @@ struct gamepad gamepads[] = {
       { .code = 0x139, .key = JKEY_START },
       { .code = 0x130, .key = JKEY_1     },
       { .code = 0x131, .key = JKEY_2     },
-      { .code = 0x132, .key = JKEY_3     }
+      { .code = 0x132, .key = JKEY_3     },
+      { .code = 0x133, .key = JKEY_4     },
+      { .code = 0x134, .key = JKEY_5     },
+      { .code = 0x135, .key = JKEY_6     },
+    }
+  },
+  {
+    .name = "HORI CO.,LTD. Fighting Stick mini 4",
+    .dpads = {
+      { .code = 0x00, .center = 128, .range = 16, .direction = DIR_X },
+      { .code = 0x01, .center = 128, .range = 16, .direction = DIR_Y },
+      { .code = 0x10, .center =   0, .range =  0, .direction = DIR_X },
+      { .code = 0x11, .center =   0, .range =  0, .direction = DIR_Y }
+    },
+    .buttons = {
+      { .code = 0x138, .key = JKEY_COIN  },
+      { .code = 0x139, .key = JKEY_START },
+      { .code = 0x131, .key = JKEY_1     },
+      { .code = 0x130, .key = JKEY_2     },
+      { .code = 0x133, .key = JKEY_3     },
+      { .code = 0x135, .key = JKEY_4     },
+      { .code = 0x132, .key = JKEY_5     },
+      { .code = 0x137, .key = JKEY_6     },
     }
   },
   {
@@ -102,6 +128,9 @@ struct gamepad gamepads[] = {
       { .code = 0x130, .key = JKEY_1     },
       { .code = 0x131, .key = JKEY_2     },
       { .code = 0x133, .key = JKEY_3     },
+      { .code = 0x134, .key = JKEY_4     },
+      { .code = 0x00a, .key = JKEY_5     },
+      { .code = 0x009, .key = JKEY_6     },
     }
   },
   {
@@ -116,6 +145,9 @@ struct gamepad gamepads[] = {
       { .code = 0x130, .key = JKEY_1     },
       { .code = 0x131, .key = JKEY_2     },
       { .code = 0x133, .key = JKEY_3     },
+      { .code = 0x134, .key = JKEY_4     },
+      { .code = 0x00a, .key = JKEY_5     },
+      { .code = 0x009, .key = JKEY_6     },
     }
   },
   {
@@ -132,26 +164,36 @@ struct gamepad gamepads[] = {
       { .code = 0x133, .key = JKEY_1     },
       { .code = 0x130, .key = JKEY_2     },
       { .code = 0x131, .key = JKEY_3     },
+      { .code = 0x134, .key = JKEY_4     },
+      { .code = 0x00a, .key = JKEY_5     },
+      { .code = 0x009, .key = JKEY_6     },
     }
   }
 };
 
 void update(enum jamma_key key, int value) {
-#if 0
+//#if 0
   static int state = 0;
   state &= ~(1 << key);
   if (value)
     state |= 1 << key;
-  for (int i = 8; i >= 0; --i)
+  for (int i = 11; i >= 0; --i)
     fprintf(stderr, "%d", (state >> i) & 1);
   fprintf(stderr, "\n");
-#endif
+//#endif
 
   int pin = gpio_pin[key];
-  if (value)
-    gpioa->oen_set_out = (1 << pin);
-  else
-    gpioa->oen_set_in = (1 << pin);
+  if (value) {
+    if (pin > 32)
+      gpiob->oen_set_out = (1 << (pin - 32));
+    else
+      gpioa->oen_set_out = (1 << pin);
+  } else {
+    if (pin > 32)
+      gpiob->oen_set_in = (1 << (pin - 32));
+    else
+      gpioa->oen_set_in = (1 << pin);
+  }
 }
 
 void do_bridge(int fd) {
@@ -203,6 +245,13 @@ void do_bridge(int fd) {
           }
           break;
         }
+        for (int i = 0; i < sizeof(detected_gamepad->buttons) / sizeof(struct button); ++i) {
+          if (detected_gamepad->buttons[i].code != e.code)
+            continue;
+          consumed = 1;
+          update(detected_gamepad->buttons[i].key, e.value);
+          break;
+        }
       }
       if (consumed)
         continue;
@@ -223,13 +272,18 @@ int main(int argc, char** argv) {
   size_t size = sysconf(_SC_PAGE_SIZE);
   config_regs = mmap(NULL, size, prot, MAP_SHARED, mem_fd, RDA_CONFIG_REGS);
   gpioa = mmap(NULL, size, prot, MAP_SHARED, mem_fd, GPIOA_BASE);
+  gpiob = mmap(NULL, size, prot, MAP_SHARED, mem_fd, GPIOB_BASE);
 
-  // Enable GPIO_A 14 and 15 in addition to GPIO_A 0 through 6.
-  config_regs->ap_gpio_a_mode |= (1 << 14) | (1 << 15);
+  // Enable GPIO_A 14, 15, and 16 in addition to GPIO_A 0 through 6.
+  config_regs->ap_gpio_a_mode |= (1 << 14) | (1 << 15) | (1 << 16);
+  // Enable GPIO_B 37(5), and 38(6).
+  config_regs->ap_gpio_b_mode |= (1 << 5) | (1 << 6);
 
-  // Set GPIO_A 0...6, 14, and 15 as output port, and drive HIGH signals.
-  gpioa->oen_set_in = 0xc07f;
-  gpioa->clr = 0xc07f;
+  // Set GPIO_A 0...6, 14, 15, and 16 as output port, and drive HIGH signals.
+  gpioa->oen_set_in = 0x1c07f;
+  gpioa->clr = 0x0001c07f;
+  gpiob->oen_set_in = 0x00000060;
+  gpiob->clr = 0x00000060;
 
   for (;;) {
     int fd = open(EVENT_DEV, O_RDWR);
