@@ -193,6 +193,14 @@ int manage_input_mode(
   if (pressing) {
     pressing++;
 
+    if (!configured && pressing > 1000) {
+      int i;
+      for (i = 0; i < 4; ++i)
+        led_on(i);
+      fprintf(stderr, "shutting down...");
+      exit(execl("/sbin/shutdown", "/sbin/shutdown", "-r", "now", NULL));
+    }
+
     if (pressed_state & B_A)
       rapid_a ^= 1;
     if (pressed_state & B_B)
@@ -224,32 +232,31 @@ int manage_input_mode(
       configured = 1;
     }
 
-    led_set(0, rapid_a);
-    led_set(1, rapid_b);
-    led_set(2, rapid_x);
-    led_set(3, rapid_y);
+    if (pressing < 500) {
+      led_set(0, rapid_a);
+      led_set(1, rapid_b);
+      led_set(2, rapid_x);
+      led_set(3, rapid_y);
+    }
+  }
+
+  if (!configured && pressing == 500) {
+    mode = (mode + 1) % 3;
+    return 1;
+  }
+
+  if (!pressed || pressing > 500) {
+    led_set(0, mode == 0);
+    led_set(1, mode == 1);
+    led_set(2, mode == 2);
+    led_set(3, mode == 3);
   }
 
   if (!changed)
     return 0;
 
-  if (pressed) {
-    pressing = 1;
-    return 0;
-  }
-
-  int mode_changed = 0;
-  if (!configured && pressing > 1000) {
-    mode = (mode + 1) % 3;
-    mode_changed = 1;
-  }
-
-  pressing = 0;
-  led_set(0, mode == 0);
-  led_set(1, mode == 1);
-  led_set(2, mode == 2);
-  led_set(3, mode == 3);
-  return mode_changed;
+  pressing = pressed ? 1 : 0;
+  return 0;
 }
 
 int main() {
@@ -279,7 +286,7 @@ int main() {
     old_raw_state = new_state;
     int pressed_state = changed_state & ~new_state;
     int released_state = changed_state & new_state;
-    if ((rapid_count >> 4) & 1) {
+    if ((rapid_count >> 3) & 1) {
       if (rapid_a)
         new_state |= B_A;
       if (rapid_b)
