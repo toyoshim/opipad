@@ -1,5 +1,9 @@
 static char opg_driver_name[] = "OPiPad Gadget HID Driver for PS4";
 
+#define OPG_DEVICE_CLASS USB_CLASS_PER_INTERFACE
+#define OPG_DEVICE_SUB_CLASS 0
+#define OPG_DEVICE_PROTOCOL 0
+
 #define OPG_VENDOR_ID 0x6666
 #define OPG_PRODUCT_ID 0x0884
 
@@ -184,6 +188,8 @@ static const char* opg_get_string(int idx) {
       return "TOYOSHIMA-HOUSE";
     case IDX_PRODUCT:
       return "OPiPad PS4 Adaptor";
+    case IDX_SERIAL:
+      return "0";
     default:
       break;
   }
@@ -210,10 +216,15 @@ static void opg_update_report(void) {
   opg_report[7] += 4;  // count-up
 }
 
+// The per-8mins auth is not implemented in this source code.
 static int opg_setup(
     struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
   struct driver_data* data = get_gadget_data(gadget);
   int type = r->bRequestType & USB_TYPE_MASK;
+  printk("%s: bRequestType: %02x, bRequest: %02x, wValue: %04x, "
+      "wIndex: %04x, wLendth: %04x\n",
+      opg_driver_name, r->bRequestType, r->bRequest, r->wValue, r->wIndex,
+      r->wLength);
   if (type == USB_TYPE_CLASS && r->bRequest == HID_REQ_GET_REPORT) {
     switch(le16_to_cpu(r->wValue)) {
       case 0x0303:
@@ -227,7 +238,7 @@ static int opg_setup(
         memcpy(data->ep0_request->buf, report03f3, sizeof(report03f3));
         return sizeof(report03f3);
       default:
-        printk("%s: report page: %04x\n", opg_driver_name, r->wValue);
+        printk("%s: report type/id: %04x\n", opg_driver_name, r->wValue);
         break;
     }
   }

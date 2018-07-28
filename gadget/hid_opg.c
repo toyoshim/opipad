@@ -8,6 +8,7 @@ enum {
   IDX_NULL,
   IDX_MANUFACTURER,
   IDX_PRODUCT,
+  IDX_SERIAL,
 
   IDX_USER,
 };
@@ -47,6 +48,8 @@ struct driver_data {
 #include "hid_opg_gpio.h"
 
 #include "hid_opg_ps4.h"
+//#include "hid_opg_xbo.h"
+//#include "hid_opg_ngm.h"
 
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -56,16 +59,16 @@ struct usb_device_descriptor device_desc = {
   .bLength            = USB_DT_DEVICE_SIZE,
   .bDescriptorType    = USB_DT_DEVICE,
   .bcdUSB             = cpu_to_le16(0x200),
-  .bDeviceClass       = USB_CLASS_PER_INTERFACE,
-  .bDeviceSubClass    = 0,
-  .bDeviceProtocol    = 0,
+  .bDeviceClass       = OPG_DEVICE_CLASS,
+  .bDeviceSubClass    = OPG_DEVICE_SUB_CLASS,
+  .bDeviceProtocol    = OPG_DEVICE_PROTOCOL,
   .bMaxPacketSize0    = 64,
   .idVendor           = cpu_to_le16(OPG_VENDOR_ID),
   .idProduct          = cpu_to_le16(OPG_PRODUCT_ID),
   .bcdDevice          = cpu_to_le16(0x0100),
   .iManufacturer      = IDX_MANUFACTURER,
   .iProduct           = IDX_PRODUCT,
-  .iSerialNumber      = IDX_NULL,
+  .iSerialNumber      = IDX_SERIAL,
   .bNumConfigurations = 1,
 };
 
@@ -179,7 +182,6 @@ static int get_descriptor(
           string_desc_lang.bLength);
       return string_desc_lang.bLength;
     case USB_DT_HID_REPORT:
-      opg_update_report();
       memcpy(data->ep0_request->buf, opg_hid_report, sizeof(opg_hid_report));
       return sizeof(opg_hid_report);
     default:
@@ -198,11 +200,13 @@ static void setup_complete(struct usb_ep* ep, struct usb_request* r) {
   }
 }
 
-static void report_complete(struct usb_ep* ep, struct usb_request* r) {
+static void in_report_complete(struct usb_ep* ep, struct usb_request* r) {
   int result;
 
   if (r->status) {
-    printk("%s: failed to send a report, suspending\n", opg_driver_name);
+    printk("%s: failed to send an in-data report, suspending\n",
+        opg_driver_name);
+    usb_ep_fifo_flush(ep);
     return;
   }
 
@@ -211,7 +215,11 @@ static void report_complete(struct usb_ep* ep, struct usb_request* r) {
 
   result = usb_ep_queue(ep, r, GFP_ATOMIC);
   if (result < 0)
-    printk("%s: failed to queue a report\n", opg_driver_name);
+    printk("%s: failed to queue an in-data report\n", opg_driver_name);
+}
+
+static void out_report_complete(struct usb_ep* ep, struct usb_request* r) {
+  printk("%s: not impl, out_report_complete\n", opg_driver_name);
 }
 
 static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
@@ -236,24 +244,44 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
           data->ep_in_request = usb_ep_alloc_request(data->ep_in, GFP_KERNEL);
           if (data->ep_in_request) {
             data->ep_in_request->buf =
-              kmalloc(data->ep_in->desc->wMaxPacketSize, GFP_KERNEL);
+                kmalloc(data->ep_in->desc->wMaxPacketSize, GFP_KERNEL);
             if (data->ep_in_request->buf)
               usb_ep_enable(data->ep_in);
           }
-          if (data->ep_in_request && data->ep_in_request->buf) {
-            data->ep_in_request->status = 0;
-            data->ep_in_request->zero = 0;
-            data->ep_in_request->complete = report_complete;
-            data->ep_in_request->length = data->ep_in->desc->wMaxPacketSize;
-            report_complete(data->ep_in, data->ep_in_request);
-            value = w_length;
-          } else {
-            printk("%s: failed to setup endpoints\n", opg_driver_name);
-            value = -ENOMEM;
-          }
-        } else {
-          value = w_length;
         }
+
+        if (data->ep_out && !data->ep_out_request) {
+          data->ep_out_request = usb_ep_alloc_request(data->ep_out, GFP_KERNEL);
+          if (data->ep_out_request) {
+            data->ep_out_request->buf =
+               kmalloc(data->ep_out->desc->wMaxPacketSize, GFP_KERNEL);
+            if (data->ep_out_request->buf)
+              usb_ep_enable(data->ep_out);
+          }
+        }
+
+        if (data->ep_in_request && data->ep_in_request->buf) {
+          data->ep_in_request->status = 0;
+          data->ep_in_request->zero = 0;
+          data->ep_in_request->complete = in_report_complete;
+          data->ep_in_request->length = data->ep_in->desc->wMaxPacketSize;
+          in_report_complete(data->ep_in, data->ep_in_request);
+        } else {
+          printk("%s: failed to setup data-in endpoint\n", opg_driver_name);
+          value = -ENOMEM;
+          break;
+        }
+        if (data->ep_out_request && data->ep_out_request->buf) {
+          data->ep_out_request->status = 0;
+          data->ep_out_request->zero = 0;
+          data->ep_out_request->complete = out_report_complete;
+          data->ep_out_request->length = data->ep_out->desc->wMaxPacketSize;
+        } else {
+          printk("%s: failed to setup data-out endpoint\n", opg_driver_name);
+          value = -ENOMEM;
+          break;
+        }
+        value = w_length;
         break;
       default:
         printk("%s: standard setup not impl: %02x-%02x\n",
@@ -367,6 +395,11 @@ static void unbind(struct usb_gadget* gadget) {
     usb_ep_disable(data->ep_out);
     data->ep_out->driver_data = NULL;
     data->ep_out->desc = NULL;
+    if (data->ep_out_request) {
+      if (data->ep_out_request->buf)
+        kfree(data->ep_out_request->buf);
+      usb_ep_free_request(data->ep_out, data->ep_out_request);
+    }
   }
 
   if (data->ep0_request) {
