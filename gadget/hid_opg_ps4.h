@@ -1,5 +1,6 @@
 static char opg_driver_name[] = "OPiPad Gadget HID Driver for PS4";
 
+#define OPG_USB_VERSION cpu_to_le16(0x200)
 #define OPG_DEVICE_CLASS USB_CLASS_PER_INTERFACE
 #define OPG_DEVICE_SUB_CLASS 0
 #define OPG_DEVICE_PROTOCOL 0

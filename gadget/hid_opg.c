@@ -53,12 +53,20 @@ struct driver_data {
 
 MODULE_LICENSE("Dual BSD/GPL");
 
+#if !defined(NO_IDX_PRODUCT)
+# define NO_IDX_PRODUCT 0
+#endif
+
+#if !defined(NO_IDX_SERIAL)
+# define NO_IDX_SERIAL 0
+#endif
+
 #define USB_BUFSIZ 1024
 
 struct usb_device_descriptor device_desc = {
   .bLength            = USB_DT_DEVICE_SIZE,
   .bDescriptorType    = USB_DT_DEVICE,
-  .bcdUSB             = cpu_to_le16(0x200),
+  .bcdUSB             = OPG_USB_VERSION,
   .bDeviceClass       = OPG_DEVICE_CLASS,
   .bDeviceSubClass    = OPG_DEVICE_SUB_CLASS,
   .bDeviceProtocol    = OPG_DEVICE_PROTOCOL,
@@ -67,8 +75,8 @@ struct usb_device_descriptor device_desc = {
   .idProduct          = cpu_to_le16(OPG_PRODUCT_ID),
   .bcdDevice          = cpu_to_le16(0x0100),
   .iManufacturer      = IDX_MANUFACTURER,
-  .iProduct           = IDX_PRODUCT,
-  .iSerialNumber      = IDX_SERIAL,
+  .iProduct           = NO_IDX_PRODUCT ? 0 : IDX_PRODUCT,
+  .iSerialNumber      = NO_IDX_SERIAL ? 0 : IDX_SERIAL,
   .bNumConfigurations = 1,
 };
 
@@ -181,9 +189,11 @@ static int get_descriptor(
       memcpy(data->ep0_request->buf, &string_desc_lang,
           string_desc_lang.bLength);
       return string_desc_lang.bLength;
+#if OPG_DEVICE_CLASS != USB_CLASS_VENDOR_SPEC
     case USB_DT_HID_REPORT:
       memcpy(data->ep0_request->buf, opg_hid_report, sizeof(opg_hid_report));
       return sizeof(opg_hid_report);
+#endif
     default:
       printk("%s: unknown descriptor %02x, ignoring\n", opg_driver_name, type);
       break;
@@ -212,7 +222,8 @@ static void in_report_complete(struct usb_ep* ep, struct usb_request* r) {
 
   opg_update_report();
   memcpy(r->buf, opg_report, sizeof(opg_report));
-
+  r->length = sizeof(opg_report);
+  r->zero = 0;
   result = usb_ep_queue(ep, r, GFP_ATOMIC);
   if (result < 0)
     printk("%s: failed to queue an in-data report\n", opg_driver_name);
@@ -294,6 +305,8 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
         value = sizeof(opg_report);
         break;
       case HID_REQ_SET_REPORT:
+        value = w_length;
+        break;
       case HID_REQ_SET_IDLE:
         value = w_length;
         break;
@@ -307,9 +320,9 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
     }
   }
 
-  if (value >= 0) {
+  if (value > 0) {
     data->ep0_request->length = min((u16)value, w_length);
-    data->ep0_request->zero = value < w_length;
+    data->ep0_request->zero = value > w_length;
     data->last_request_type = r->bRequestType;
     data->last_request = r->bRequest;
     value = usb_ep_queue(gadget->ep0, data->ep0_request, GFP_ATOMIC);
