@@ -47,9 +47,9 @@ struct driver_data {
 
 #include "hid_opg_gpio.h"
 
-#include "hid_opg_ps4.h"
+//#include "hid_opg_ps4.h"
 //#include "hid_opg_xbo.h"
-//#include "hid_opg_ngm.h"
+#include "hid_opg_ngm.h"
 
 MODULE_LICENSE("Dual BSD/GPL");
 
