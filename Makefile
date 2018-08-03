@@ -6,6 +6,7 @@ obj-m := hid_opp.o
 
 all:
 	make uin_oppd
+	make input2gpio
 	make modules
 
 modules:
@@ -13,4 +14,4 @@ modules:
 
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
-	rm uin_oppd
+	rm uin_oppd input2gpio
