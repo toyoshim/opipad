@@ -29,7 +29,7 @@ static char opg_hid_report[] = {
   0x81, 0x01,  // input (constant)
   0x05, 0x01,  // usage page (desktop)
   0x25, 0x07,  // logical maximum (7)
-  0x46, 0x3b, 0x01,  // physical maximum (315)
+  0x45, 0x07,  // physical maximum (7)
   0x75, 0x04,  // report size (4)
   0x95, 0x01,  // report count (1)
   0x65, 0x14,  // unit (degrees)
@@ -49,12 +49,16 @@ static char opg_hid_report[] = {
   0x81, 0x02,  // input (variable)
   0x05, 0x02,  // usage page (simulation)
   0x15, 0x00,  // logical minimum (0)
-  0x26, 0xff, 0x00,  // logical maximum (255)
+  0x25, 0x01,  // logical maximum (1)
+  0x45, 0x01,  // physical maximum (1)
   0x09, 0xc5,  // usage (c5h)
   0x09, 0xc4,  // usage (c4h)
   0x09, 0x02,  // usage (02h)
-  0x75, 0x08,  // report size (8)
-  0x81, 0x02,  // input (array)
+  0x75, 0x01,  // report size (1)
+  0x95, 0x03,  // report count (3)
+  0x81, 0x02,  // input (variable)
+  0x95, 0x05,  // report count (5)
+  0x81, 0x01,  // input (constant)
   0xc0,  // end collection
 };
 
@@ -124,6 +128,8 @@ static __u8 opg_report[] = {
   // 6 f 2
   // 5 4 3
   0x0f,
+
+  0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 static const char* opg_get_string(int idx) {
