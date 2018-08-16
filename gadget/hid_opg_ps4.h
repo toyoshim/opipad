@@ -8,6 +8,8 @@ static char opg_driver_name[] = "OPiPad Gadget HID Driver for PS4";
 #define OPG_VENDOR_ID 0x6666
 #define OPG_PRODUCT_ID 0x0884
 
+#define USE_EP_OUT
+
 static char opg_hid_report[] = {
   0x05, 0x01,  // usage page (desktop)
   0x09, 0x05,  // usage (gamepad)

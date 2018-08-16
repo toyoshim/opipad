@@ -49,7 +49,8 @@ struct driver_data {
 
 //#include "hid_opg_ps4.h"
 //#include "hid_opg_xbo.h"
-#include "hid_opg_ngm.h"
+//#include "hid_opg_ngm.h"
+#include "hid_opg_rbg.h"
 
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -229,9 +230,11 @@ static void in_report_complete(struct usb_ep* ep, struct usb_request* r) {
     printk("%s: failed to queue an in-data report\n", opg_driver_name);
 }
 
+#if defined(USE_EP_OUT)
 static void out_report_complete(struct usb_ep* ep, struct usb_request* r) {
   printk("%s: not impl, out_report_complete\n", opg_driver_name);
 }
+#endif
 
 static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
   struct driver_data* data = get_gadget_data(gadget);
@@ -261,6 +264,7 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
           }
         }
 
+#if defined(USE_EP_OUT)
         if (data->ep_out && !data->ep_out_request) {
           data->ep_out_request = usb_ep_alloc_request(data->ep_out, GFP_KERNEL);
           if (data->ep_out_request) {
@@ -270,6 +274,7 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
               usb_ep_enable(data->ep_out);
           }
         }
+#endif
 
         if (data->ep_in_request && data->ep_in_request->buf) {
           data->ep_in_request->status = 0;
@@ -282,6 +287,8 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
           value = -ENOMEM;
           break;
         }
+
+#if defined(USE_EP_OUT)
         if (data->ep_out_request && data->ep_out_request->buf) {
           data->ep_out_request->status = 0;
           data->ep_out_request->zero = 0;
@@ -292,6 +299,7 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
           value = -ENOMEM;
           break;
         }
+#endif
         value = w_length;
         break;
       default:
@@ -377,6 +385,7 @@ static int bind(struct usb_gadget* gadget) {
     printk("%s: failed to allocate ep-in\n", opg_driver_name);
     return -EOPNOTSUPP;
   }
+#if defined(USE_EP_OUT)
   data->ep_out = find_int_ep(gadget, opg_config_desc.ep_out.wMaxPacketSize, 0);
   if (data->ep_out) {
     data->ep_out->driver_data = data;
@@ -386,6 +395,7 @@ static int bind(struct usb_gadget* gadget) {
   } else {
     printk("%s: failed to allocate ep-out, ignoring\n", opg_driver_name);
   }
+#endif
   return 0;
 }
 
@@ -404,6 +414,7 @@ static void unbind(struct usb_gadget* gadget) {
       usb_ep_free_request(data->ep_in, data->ep_in_request);
     }
   }
+#if defined(USE_EP_OUT)
   if (data->ep_out) {
     usb_ep_disable(data->ep_out);
     data->ep_out->driver_data = NULL;
@@ -414,6 +425,7 @@ static void unbind(struct usb_gadget* gadget) {
       usb_ep_free_request(data->ep_out, data->ep_out_request);
     }
   }
+#endif
 
   if (data->ep0_request) {
     if (data->ep0_request->buf)
