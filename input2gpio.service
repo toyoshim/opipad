@@ -7,8 +7,8 @@ Conflicts=shutdown.target
 [Service]
 ExecStart=/opt/opipad/input2gpio.sh
 ExecStop=killall input2gpio
-Type=onshot
-RemainAfterExit=yes
+Type=simple
+RemainAfterExit=no
 Restart=always
 
 [Install]
